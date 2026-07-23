@@ -1,7 +1,7 @@
 #!/bin/zsh
 # Vibe — a tiny, mouse-aware macOS terminal editor with an AI copilot.
 
-setopt NO_NOMATCH
+setopt NO_NOMATCH EXTENDED_GLOB
 
 APP_NAME="Vibe"
 ROOT_DIR="${0:A:h}"
@@ -19,6 +19,8 @@ CURSOR_COL=0
 SCROLL=0
 AI_SCROLL=0
 ACTIVE="editor"
+EXPLORER_INDEX=1
+AI_PROMPT=""
 DIRTY=0
 STATUS="Ready"
 RUNNING=1
@@ -50,10 +52,13 @@ load_file() {
 refresh_files() {
   FILES=()
   local item
-  for item in "$TARGET_FILE:h"/*(.N); do
-    [[ "${item:t}" == .* ]] || FILES+=("${item:t}")
+  for item in "${TARGET_FILE:h}"/*; do
+    [[ -f "$item" && "${item:t}" != .* ]] || continue
+    FILES+=("${item:t}")
     (( ${#FILES} >= 40 )) && break
   done
+  (( EXPLORER_INDEX < 1 )) && EXPLORER_INDEX=1
+  (( EXPLORER_INDEX > ${#FILES} && ${#FILES} > 0 )) && EXPLORER_INDEX=${#FILES}
 }
 
 cleanup() {
@@ -68,7 +73,7 @@ raw_on() {
 }
 
 save_file() {
-  local parent="$TARGET_FILE:h"
+  local parent="${TARGET_FILE:h}"
   [[ -d "$parent" ]] || { STATUS="Folder does not exist"; return; }
   {
     local i
@@ -120,7 +125,9 @@ draw() {
       idx=$(( r - 2 ))
       if (( idx >= 1 && idx <= ${#FILES} )); then
         label="$FILES[$idx]"
-        if [[ "$label" == "${TARGET_FILE:t}" ]]; then
+        if [[ "$ACTIVE" == explorer && idx == EXPLORER_INDEX ]]; then
+          printf '\e[48;5;61m\e[38;5;231m› '
+        elif [[ "$label" == "${TARGET_FILE:t}" ]]; then
           printf '\e[48;5;60m\e[38;5;231m  '
         else
           printf '\e[38;5;250m  '
@@ -162,6 +169,13 @@ draw() {
     if (( r == 1 )); then
       printf '\e[38;5;141m\e[1m  ✦ AI COPILOT'
       printf '%*s' $((ai-14)) ''
+    elif (( r == body - 1 )); then
+      printf '\e[38;5;245m  ASK AI'
+      printf '%*s' $((ai-8)) ''
+    elif (( r == body )); then
+      if [[ "$ACTIVE" == ai_input ]]; then printf '\e[48;5;60m\e[38;5;255m  › '; else printf '\e[48;5;237m\e[38;5;250m  › '; fi
+      clip "${AI_PROMPT:-Type a question…}" $((ai-4))
+      printf '  '
     else
       ai_idx=$(( AI_SCROLL + r - 1 ))
       if (( ai_idx >= 1 && ai_idx <= ${#AI_LINES} )); then
@@ -174,8 +188,8 @@ draw() {
     printf '\e[0m'
   done
 
-  printf '\n\e[48;5;237m\e[38;5;250m  ^S save   ^P open   ^K ask AI   ^Q quit'
-  local status_space=$(( W - 44 - ${#STATUS} ))
+  printf '\n\e[48;5;237m\e[38;5;250m  ^S save  ^N new  ^B files  ^K AI  Tab panes  ^Q quit'
+  local status_space=$(( W - 55 - ${#STATUS} ))
   (( status_space < 1 )) && status_space=1
   printf '%*s\e[38;5;141m%s  \e[0m' "$status_space" '' "$STATUS"
   printf '\e[48;5;234m\e[38;5;244m  Ln %d, Col %d   %s  ' "$CURSOR_ROW" $((CURSOR_COL+1)) "$MODEL"
@@ -186,6 +200,10 @@ draw() {
     local screen_col=$(( side + line_no_width + CURSOR_COL + 2 ))
     (( screen_col > side + edit )) && screen_col=$((side+edit))
     printf '\e[%d;%dH\e[?25h' "$screen_row" "$screen_col"
+  elif [[ "$ACTIVE" == ai_input ]]; then
+    local input_col=$(( W - ai + 4 + ${#AI_PROMPT} ))
+    (( input_col > W - 2 )) && input_col=$((W-2))
+    printf '\e[%d;%dH\e[?25h' $((H-3)) "$input_col"
   else
     printf '\e[?25l'
   fi
@@ -203,9 +221,29 @@ prompt_line() {
 open_prompt() {
   prompt_line "Open file"
   [[ -z "$REPLY" ]] && return
-  [[ "$REPLY" != /* ]] && REPLY="$TARGET_FILE:h/$REPLY"
+  [[ "$REPLY" != /* ]] && REPLY="${TARGET_FILE:h}/$REPLY"
   TARGET_FILE="${REPLY:A}"
   load_file
+}
+
+create_file() {
+  prompt_line "New file (relative path)"
+  [[ -z "$REPLY" ]] && return
+  local new_path="$REPLY"
+  [[ "$new_path" != /* ]] && new_path="${TARGET_FILE:h}/$new_path"
+  new_path="${new_path:A}"
+  if [[ -e "$new_path" ]]; then STATUS="File already exists"; return; fi
+  if [[ ! -d "$new_path:h" ]]; then STATUS="Folder does not exist"; return; fi
+  TARGET_FILE="$new_path" BUFFER=("") CURSOR_ROW=1 CURSOR_COL=0 SCROLL=0 DIRTY=1 ACTIVE="editor"
+  save_file
+  STATUS="Created ${TARGET_FILE:t}"
+}
+
+open_explorer_file() {
+  (( ${#FILES} == 0 )) && return
+  TARGET_FILE="${TARGET_FILE:h}/$FILES[$EXPLORER_INDEX]"
+  load_file
+  ACTIVE="editor"
 }
 
 wrap_ai_text() {
@@ -226,9 +264,9 @@ wrap_ai_text() {
 }
 
 ask_ai() {
-  prompt_line "Ask AI"
-  local question="$REPLY"
+  local question="$AI_PROMPT"
   [[ -z "$question" ]] && return
+  AI_PROMPT=""
   if [[ -z "${OPENAI_API_KEY:-}" ]]; then
     AI_LINES=("No API key found." "Expected .env.local") STATUS="AI unavailable"; return
   fi
@@ -255,7 +293,7 @@ JXA
 )"
   [[ -z "$answer" ]] && answer="The AI returned an empty response."
   wrap_ai_text "$answer"
-  ACTIVE="ai" AI_SCROLL=0 STATUS="AI response ready"
+  ACTIVE="ai_input" AI_SCROLL=0 STATUS="AI response ready"
 }
 
 insert_char() {
@@ -297,7 +335,8 @@ handle_mouse() {
     if (( y >= 2 && y < $(tput lines)-1 )); then
       if (( x <= side )); then
         local fi=$(( y - 2 ))
-        if (( fi >= 1 && fi <= ${#FILES} )); then TARGET_FILE="$TARGET_FILE:h/$FILES[$fi]"; load_file; fi
+        ACTIVE="explorer"
+        if (( fi >= 1 && fi <= ${#FILES} )); then EXPLORER_INDEX=$fi; open_explorer_file; fi
       elif (( x <= side + edit + 2 )); then
         ACTIVE="editor"
         local row=$(( SCROLL + y - 1 ))
@@ -307,7 +346,7 @@ handle_mouse() {
         (( CURSOR_COL < 0 )) && CURSOR_COL=0
         (( CURSOR_COL > ${#BUFFER[$CURSOR_ROW]} )) && CURSOR_COL=${#BUFFER[$CURSOR_ROW]}
       else
-        ACTIVE="ai"
+        if (( y >= $(tput lines)-3 )); then ACTIVE="ai_input"; else ACTIVE="ai"; fi
       fi
     fi
   fi
@@ -343,17 +382,34 @@ main_loop() {
       $'\x11') RUNNING=0;;
       $'\x13') save_file;;
       $'\x10') open_prompt;;
-      $'\x0b') ask_ai;;
-      $'\x7f'|$'\x08') [[ "$ACTIVE" == editor ]] && backspace;;
-      $'\r'|$'\n') [[ "$ACTIVE" == editor ]] && newline;;
+      $'\x0e') create_file;;
+      $'\x02') ACTIVE="explorer";;
+      $'\x0b') ACTIVE="ai_input";;
+      $'\t')
+        case "$ACTIVE" in editor) ACTIVE="explorer";; explorer) ACTIVE="ai_input";; *) ACTIVE="editor";; esac;;
+      $'\x7f'|$'\x08')
+        if [[ "$ACTIVE" == editor ]]; then backspace
+        elif [[ "$ACTIVE" == ai_input && -n "$AI_PROMPT" ]]; then AI_PROMPT="${AI_PROMPT[1,-2]}"; fi;;
+      $'\r'|$'\n')
+        if [[ "$ACTIVE" == editor ]]; then newline
+        elif [[ "$ACTIVE" == explorer ]]; then open_explorer_file
+        elif [[ "$ACTIVE" == ai_input ]]; then ask_ai; fi;;
       'ESC[A')
-        if [[ "$ACTIVE" == editor ]]; then ((CURSOR_ROW>1))&&((CURSOR_ROW--)); ((CURSOR_COL>${#BUFFER[$CURSOR_ROW]}))&&CURSOR_COL=${#BUFFER[$CURSOR_ROW]}; else ((AI_SCROLL>0))&&((AI_SCROLL--)); fi;;
+        if [[ "$ACTIVE" == editor ]]; then ((CURSOR_ROW>1))&&((CURSOR_ROW--)); ((CURSOR_COL>${#BUFFER[$CURSOR_ROW]}))&&CURSOR_COL=${#BUFFER[$CURSOR_ROW]}
+        elif [[ "$ACTIVE" == explorer ]]; then ((EXPLORER_INDEX>1))&&((EXPLORER_INDEX--))
+        else ((AI_SCROLL>0))&&((AI_SCROLL--)); fi;;
       'ESC[B')
-        if [[ "$ACTIVE" == editor ]]; then ((CURSOR_ROW<${#BUFFER}))&&((CURSOR_ROW++)); ((CURSOR_COL>${#BUFFER[$CURSOR_ROW]}))&&CURSOR_COL=${#BUFFER[$CURSOR_ROW]}; else ((AI_SCROLL++)); fi;;
+        if [[ "$ACTIVE" == editor ]]; then ((CURSOR_ROW<${#BUFFER}))&&((CURSOR_ROW++)); ((CURSOR_COL>${#BUFFER[$CURSOR_ROW]}))&&CURSOR_COL=${#BUFFER[$CURSOR_ROW]}
+        elif [[ "$ACTIVE" == explorer ]]; then ((EXPLORER_INDEX<${#FILES}))&&((EXPLORER_INDEX++))
+        else ((AI_SCROLL++)); fi;;
       'ESC[C') [[ "$ACTIVE" == editor ]] && ((CURSOR_COL<${#BUFFER[$CURSOR_ROW]})) && ((CURSOR_COL++));;
       'ESC[D') [[ "$ACTIVE" == editor ]] && ((CURSOR_COL>0)) && ((CURSOR_COL--));;
       MOUSE|ESC) ;;
-      *) [[ "$ACTIVE" == editor && "$REPLY" == [[:print:]] ]] && insert_char "$REPLY";;
+      *)
+        if [[ "$REPLY" == [[:print:]] ]]; then
+          if [[ "$ACTIVE" == editor ]]; then insert_char "$REPLY"
+          elif [[ "$ACTIVE" == ai_input ]]; then AI_PROMPT+="$REPLY"; fi
+        fi;;
     esac
   done
 }

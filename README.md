@@ -15,7 +15,7 @@ Open a specific file:
 ./vibe.sh path/to/file.js
 ```
 
-Vibe uses macOS Terminal, iTerm2, Warp, or another ANSI-compatible terminal. Drag the window edges to resize it; the layout redraws automatically. Click the explorer, editor, or AI panel to switch focus.
+Vibe uses macOS Terminal, iTerm2, Warp, or another ANSI-compatible terminal. Drag the window edges to resize it; the layout redraws automatically. Click a pane or press `Tab` to move between the explorer, editor, and AI input.
 
 ## Controls
 
@@ -23,10 +23,13 @@ Vibe uses macOS Terminal, iTerm2, Warp, or another ANSI-compatible terminal. Dra
 | --- | --- |
 | Save | `Ctrl-S` |
 | Open a file | `Ctrl-P` |
-| Ask the AI copilot | `Ctrl-K` |
+| Create a file | `Ctrl-N` |
+| Focus file explorer | `Ctrl-B` |
+| Focus AI input | `Ctrl-K` |
 | Quit | `Ctrl-Q` |
-| Move | Arrow keys or click |
-| Scroll AI response | Up/down while AI panel is selected |
+| Move between panes | `Tab` or click |
+| Select/open files | Arrow keys and `Enter` |
+| Send AI question | Type beneath the chatbot and press `Enter` |
 
 ## AI setup
 
@@ -50,4 +53,3 @@ API usage is billed through the OpenAI Platform project associated with your key
 ## Security
 
 `.env.local` is ignored by Git. Never paste API keys into `vibe.sh`, screenshots, issues, or commits. If a key is ever exposed, revoke it in the OpenAI Platform dashboard and create a replacement.
-
