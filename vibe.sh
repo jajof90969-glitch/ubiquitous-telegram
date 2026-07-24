@@ -190,8 +190,8 @@ draw() {
     printf '\e[0m'
   done
 
-  printf '\n\e[48;5;237m\e[38;5;250m  ^S save  ^N new  ^B files  ^K AI  Tab panes  ^Q quit'
-  local status_space=$(( W - 55 - ${#STATUS} ))
+  printf '\n\e[48;5;237m\e[38;5;250m  ^S save  ^N new  ^B files  ^K AI  ^G key  Tab panes  ^Q quit'
+  local status_space=$(( W - 63 - ${#STATUS} ))
   (( status_space < 1 )) && status_space=1
   printf '%*s\e[38;5;141m%s  \e[0m' "$status_space" '' "$STATUS"
   printf '\e[48;5;234m\e[38;5;244m  Ln %d, Col %d   %s  ' "$CURSOR_ROW" $((CURSOR_COL+1)) "$MODEL"
@@ -218,6 +218,47 @@ prompt_line() {
   IFS= read -r value
   stty -echo -icanon -ixon min 1 time 0
   REPLY="$value"
+}
+
+prompt_secret() {
+  local title="$1" value=""
+  stty -echo icanon
+  printf '\e[?25h\e[%d;1H\e[2K\e[48;5;60m\e[38;5;255m  %s: \e[38;5;245m(input hidden)\e[0m' "$(tput lines)" "$title"
+  IFS= read -r value
+  printf '\n'
+  stty -echo -icanon -ixon min 1 time 0
+  REPLY="$value"
+}
+
+save_gemini_key() {
+  prompt_secret "Gemini API key"
+  local new_key="$REPLY"
+  REPLY=""
+  [[ -z "$new_key" ]] && { STATUS="Key change cancelled"; return; }
+  [[ -L "$ENV_FILE" ]] && { STATUS="Refusing symlinked key file"; new_key=""; return; }
+
+  local temp_env="${ENV_FILE}.tmp.$$" line found=0
+  local old_umask="$(umask)"
+  umask 077
+  : >| "$temp_env" || { STATUS="Could not save key"; umask "$old_umask"; new_key=""; return; }
+  if [[ -f "$ENV_FILE" ]]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      if [[ "$line" == GEMINI_API_KEY=* ]]; then
+        (( found == 0 )) && printf 'GEMINI_API_KEY=%s\n' "$new_key" >> "$temp_env"
+        found=1
+      else
+        printf '%s\n' "$line" >> "$temp_env"
+      fi
+    done < "$ENV_FILE"
+  fi
+  (( found == 0 )) && printf 'GEMINI_API_KEY=%s\n' "$new_key" >> "$temp_env"
+  command mv -f "$temp_env" "$ENV_FILE"
+  command chmod 600 "$ENV_FILE"
+  umask "$old_umask"
+  export GEMINI_API_KEY="$new_key"
+  new_key="" line=""
+  STATUS="Gemini key saved securely"
+  AI_LINES=("Gemini is connected." "Ask a question below.")
 }
 
 open_prompt() {
@@ -387,6 +428,7 @@ main_loop() {
       $'\x0e') create_file;;
       $'\x02') ACTIVE="explorer";;
       $'\x0b') ACTIVE="ai_input";;
+      $'\x07') save_gemini_key;;
       $'\t')
         case "$ACTIVE" in editor) ACTIVE="explorer";; explorer) ACTIVE="ai_input";; *) ACTIVE="editor";; esac;;
       $'\x7f'|$'\x08')

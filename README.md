@@ -26,6 +26,7 @@ Vibe uses macOS Terminal, iTerm2, Warp, or another ANSI-compatible terminal. Dra
 | Create a file | `Ctrl-N` |
 | Focus file explorer | `Ctrl-B` |
 | Focus AI input | `Ctrl-K` |
+| Add or replace Gemini key | `Ctrl-G` |
 | Quit | `Ctrl-Q` |
 | Move between panes | `Tab` or click |
 | Select/open files | Arrow keys and `Enter` |
@@ -33,7 +34,9 @@ Vibe uses macOS Terminal, iTerm2, Warp, or another ANSI-compatible terminal. Dra
 
 ## AI setup
 
-Vibe uses the Gemini API free tier. Create a key in [Google AI Studio](https://aistudio.google.com/apikey), then save it in a private `.env.local` file next to `vibe.sh`:
+Vibe uses the Gemini API free tier. Create a key in [Google AI Studio](https://aistudio.google.com/apikey), then press `Ctrl-G` inside Vibe. Paste the key into the hidden prompt and press `Enter`; Vibe saves it privately and reloads it immediately.
+
+You can also configure it manually in a private `.env.local` file next to `vibe.sh`:
 
 ```sh
 GEMINI_API_KEY=your_key_here
