@@ -6,7 +6,7 @@ setopt NO_NOMATCH EXTENDED_GLOB
 APP_NAME="Vibe"
 ROOT_DIR="${0:A:h}"
 ENV_FILE="$ROOT_DIR/.env.local"
-MODEL="${GEMINI_MODEL:-gemini-2.5-flash}"
+MODEL="${GEMINI_MODEL:-gemini-3.5-flash}"
 TARGET_FILE="${1:-$ROOT_DIR/untitled.txt}"
 TARGET_FILE="${TARGET_FILE:A}"
 
@@ -321,7 +321,7 @@ ObjC.import('stdlib');
 JSON.stringify({system_instruction:{parts:[{text:'You are the concise coding copilot inside a terminal editor. Help with the open file. Return plain text. Do not use markdown fences unless explicitly requested.'}]},contents:[{role:'user',parts:[{text:$.getenv('QUESTION')+'\n\nOpen file:\n'+$.getenv('CONTENT')}]}],generationConfig:{maxOutputTokens:2048,temperature:0.3}})
 JXA
 )"
-  response="$(curl -sS --max-time 90 "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent" \
+  response="$(curl --http1.1 -sS --max-time 90 "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent" \
     -H "x-goog-api-key: $GEMINI_API_KEY" \
     -H 'Content-Type: application/json' \
     -d "$payload" 2>/dev/null)"

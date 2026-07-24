@@ -42,10 +42,10 @@ You can also configure it manually in a private `.env.local` file next to `vibe.
 GEMINI_API_KEY=your_key_here
 ```
 
-The default model is `gemini-2.5-flash`, a stable model with free-tier input and output usage. Override it when launching if needed:
+The default model is `gemini-3.5-flash`, Google's intelligent speed-focused model with free-tier input and output usage. Override it with the lighter model when needed:
 
 ```sh
-GEMINI_MODEL=gemini-2.5-flash-lite ./vibe.sh
+GEMINI_MODEL=gemini-3.5-flash-lite ./vibe.sh
 ```
 
 Free-tier rate limits apply and vary by account and region. Google states that free-tier content may be used to improve its products. You do not need to enable billing to use an eligible free-tier project.
