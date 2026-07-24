@@ -6,7 +6,7 @@ setopt NO_NOMATCH EXTENDED_GLOB
 APP_NAME="Vibe"
 ROOT_DIR="${0:A:h}"
 ENV_FILE="$ROOT_DIR/.env.local"
-MODEL="${OPENAI_MODEL:-gpt-5.6}"
+MODEL="${GEMINI_MODEL:-gemini-2.5-flash}"
 TARGET_FILE="${1:-$ROOT_DIR/untitled.txt}"
 TARGET_FILE="${TARGET_FILE:A}"
 
@@ -30,9 +30,11 @@ autoload -Uz colors && colors
 
 load_env() {
   if [[ -f "$ENV_FILE" ]]; then
-    local env_line
-    env_line="$(command grep '^OPENAI_API_KEY=' "$ENV_FILE" 2>/dev/null | command head -n 1)"
-    [[ -n "$env_line" ]] && export OPENAI_API_KEY="${env_line#OPENAI_API_KEY=}"
+    local env_line model_line
+    env_line="$(command grep '^GEMINI_API_KEY=' "$ENV_FILE" 2>/dev/null | command head -n 1)"
+    [[ -n "$env_line" ]] && export GEMINI_API_KEY="${env_line#GEMINI_API_KEY=}"
+    model_line="$(command grep '^GEMINI_MODEL=' "$ENV_FILE" 2>/dev/null | command head -n 1)"
+    [[ -n "$model_line" ]] && MODEL="${model_line#GEMINI_MODEL=}"
   fi
 }
 
@@ -267,28 +269,28 @@ ask_ai() {
   local question="$AI_PROMPT"
   [[ -z "$question" ]] && return
   AI_PROMPT=""
-  if [[ -z "${OPENAI_API_KEY:-}" ]]; then
-    AI_LINES=("No API key found." "Expected .env.local") STATUS="AI unavailable"; return
+  if [[ -z "${GEMINI_API_KEY:-}" ]]; then
+    AI_LINES=("Gemini key not found." "Add GEMINI_API_KEY" "to .env.local") STATUS="AI unavailable"; return
   fi
   STATUS="AI is thinking…" AI_LINES=("Working…") draw
   local content="${(j:\n:)BUFFER}"
   local payload response answer
-  payload="$(QUESTION="$question" CONTENT="$content" MODEL_NAME="$MODEL" osascript -l JavaScript <<'JXA'
+  payload="$(QUESTION="$question" CONTENT="$content" osascript -l JavaScript <<'JXA'
 ObjC.import('stdlib');
-JSON.stringify({model: $.getenv('MODEL_NAME'), input: [{role:'system', content:[{type:'input_text', text:'You are the concise coding copilot inside a terminal editor. Help with the open file. Return plain text. Do not use markdown fences unless explicitly requested.'}]},{role:'user',content:[{type:'input_text',text:$.getenv('QUESTION')+'\n\nOpen file:\n'+$.getenv('CONTENT')}]}], text:{verbosity:'low'}})
+JSON.stringify({system_instruction:{parts:[{text:'You are the concise coding copilot inside a terminal editor. Help with the open file. Return plain text. Do not use markdown fences unless explicitly requested.'}]},contents:[{role:'user',parts:[{text:$.getenv('QUESTION')+'\n\nOpen file:\n'+$.getenv('CONTENT')}]}],generationConfig:{maxOutputTokens:2048,temperature:0.3}})
 JXA
 )"
-  response="$(curl -sS --max-time 90 https://api.openai.com/v1/responses \
-    -H "Authorization: Bearer $OPENAI_API_KEY" \
+  response="$(curl -sS --max-time 90 "https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent" \
+    -H "x-goog-api-key: $GEMINI_API_KEY" \
     -H 'Content-Type: application/json' \
     -d "$payload" 2>/dev/null)"
   answer="$(AI_JSON="$response" osascript -l JavaScript <<'JXA' 2>/dev/null
 ObjC.import('stdlib');
 try {
   const x=JSON.parse($.getenv('AI_JSON'));
-  if (x.error) x.error.message;
-  else (x.output||[]).flatMap(o=>o.content||[]).filter(c=>c.type==='output_text').map(c=>c.text).join('\n');
-} catch(e) { 'Could not read the AI response.' }
+  if (x.error) 'Gemini: '+x.error.message;
+  else (x.candidates||[]).flatMap(c=>(c.content&&c.content.parts)||[]).map(p=>p.text||'').filter(Boolean).join('\n');
+} catch(e) { 'Could not reach Gemini. Check your connection.' }
 JXA
 )"
   [[ -z "$answer" ]] && answer="The AI returned an empty response."

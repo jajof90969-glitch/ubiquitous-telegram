@@ -33,15 +33,19 @@ Vibe uses macOS Terminal, iTerm2, Warp, or another ANSI-compatible terminal. Dra
 
 ## AI setup
 
-Vibe reads `OPENAI_API_KEY` from the environment or from a private `.env.local` file next to `vibe.sh`. The key is deliberately not embedded in the script, where it could be extracted or accidentally committed.
-
-The default model is `gpt-5.6`. Override it when launching if needed:
+Vibe uses the Gemini API free tier. Create a key in [Google AI Studio](https://aistudio.google.com/apikey), then save it in a private `.env.local` file next to `vibe.sh`:
 
 ```sh
-OPENAI_MODEL=gpt-5.6-terra ./vibe.sh
+GEMINI_API_KEY=your_key_here
 ```
 
-API usage is billed through the OpenAI Platform project associated with your key.
+The default model is `gemini-2.5-flash`, a stable model with free-tier input and output usage. Override it when launching if needed:
+
+```sh
+GEMINI_MODEL=gemini-2.5-flash-lite ./vibe.sh
+```
+
+Free-tier rate limits apply and vary by account and region. Google states that free-tier content may be used to improve its products. You do not need to enable billing to use an eligible free-tier project.
 
 ## Requirements
 
@@ -52,4 +56,4 @@ API usage is billed through the OpenAI Platform project associated with your key
 
 ## Security
 
-`.env.local` is ignored by Git. Never paste API keys into `vibe.sh`, screenshots, issues, or commits. If a key is ever exposed, revoke it in the OpenAI Platform dashboard and create a replacement.
+`.env.local` is ignored by Git. Never paste API keys into `vibe.sh`, screenshots, issues, or commits. If a key is ever exposed, revoke it in Google AI Studio and create a replacement.
